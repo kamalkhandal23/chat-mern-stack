@@ -6,111 +6,91 @@ function setupSocket(io) {
   const onlineUsers = new Map();
 
   io.on('connection', (socket) => {
-    console.log('[SOCKET] connected:', socket.id, 'handshake.auth=', socket.handshake.auth);
+    console.log('[SOCKET] connected:', socket.id);
 
-    if (socket.handshake && socket.handshake.auth && socket.handshake.auth.token) {
+    // AUTH
+    if (socket.handshake?.auth?.token) {
       try {
         const payload = jwt.verify(socket.handshake.auth.token, process.env.JWT_SECRET);
-        socket.userId = payload.id;
-        onlineUsers.set(payload.id, socket.id);
-        console.log('[SOCKET] authed via handshake userId=', payload.id);
+        socket.userId = payload.id || payload._id;
+        onlineUsers.set(String(socket.userId), socket.id);
       } catch (err) {
-        console.log('[SOCKET] handshake token invalid', err.message);
+        console.log('[SOCKET] handshake invalid');
       }
     }
 
     socket.on('authenticate', (data) => {
       try {
         const payload = jwt.verify(data.token, process.env.JWT_SECRET);
-        socket.userId = payload.id;
-        onlineUsers.set(payload.id, socket.id);
-        console.log('[SOCKET] authenticated via event userId=', payload.id);
-        socket.emit('authenticated', { ok: true, userId: payload.id });
-      } catch (err) {
-        console.log('[SOCKET] authenticate failed', err.message);
-        socket.emit('authenticated', { ok: false, message: 'Invalid token' });
+        socket.userId = payload.id || payload._id;
+        onlineUsers.set(String(socket.userId), socket.id);
+        socket.emit('authenticated', { ok: true });
+      } catch {
+        socket.emit('authenticated', { ok: false });
       }
     });
 
-    socket.on('join-room', (data) => {
-      const { roomId } = data || {};
+    // ROOM JOIN
+    socket.on('join-room', ({ roomId }) => {
       if (!roomId) return;
       socket.join(roomId);
-      console.log('[SOCKET] join-room', socket.userId, roomId);
-      socket.to(roomId).emit('user-joined', { userId: socket.userId, roomId });
     });
 
-    socket.on('leave-room', (data) => {
-      const { roomId } = data || {};
+    socket.on('leave-room', ({ roomId }) => {
       if (!roomId) return;
       socket.leave(roomId);
-      console.log('[SOCKET] leave-room', socket.userId, roomId);
-      socket.to(roomId).emit('user-left', { userId: socket.userId, roomId });
     });
 
-    socket.on('typing', (data) => {
-      try {
-        if (!socket.userId) return;
-        const { roomId, isTyping } = data || {};
-        socket.to(roomId).emit('typing', { userId: socket.userId, isTyping: !!isTyping });
-      } catch (err) {
-        console.error('[SOCKET] typing error', err);
-      }
+    // TYPING
+    socket.on('typing', ({ roomId, isTyping }) => {
+      if (!roomId) return;
+      socket.to(roomId).emit('typing', { userId: socket.userId, isTyping });
     });
 
-    
-    socket.on('message-delivered', async (data) => {
-      try {
-        if (!socket.userId) return;
-        const { messageId, roomId } = data || {};
-        if (!messageId) return;
-
-        await Message.updateOne(
-          { _id: messageId },
-          { $addToSet: { deliveredTo: socket.userId } }
-        );
-
-        
-        io.to(String(roomId)).emit('message-delivered', { messageId, userId: socket.userId });
-      } catch (err) {
-        console.error('[SOCKET] message-delivered error', err);
-      }
+    // DELIVERY
+    socket.on('message-delivered', async ({ messageId, roomId }) => {
+      if (!messageId) return;
+      await Message.updateOne(
+        { _id: messageId },
+        { $addToSet: { deliveredTo: socket.userId } }
+      );
+      io.to(roomId).emit('message-delivered', { messageId, userId: socket.userId });
     });
 
-    
-    socket.on('message-read', async (data) => {
-      try {
-        if (!socket.userId) return;
-        const { messageId, roomId } = data || {};
-        if (!messageId) return;
-
-        await Message.updateOne(
-          { _id: messageId },
-          { $addToSet: { readBy: socket.userId } }
-        );
-
-        io.to(String(roomId)).emit('message-read', { messageId, userId: socket.userId });
-      } catch (err) {
-        console.error('[SOCKET] message-read error', err);
-      }
+    // READ
+    socket.on('message-read', async ({ messageId, roomId }) => {
+      if (!messageId) return;
+      await Message.updateOne(
+        { _id: messageId },
+        { $addToSet: { readBy: socket.userId } }
+      );
+      io.to(roomId).emit('message-read', { messageId, userId: socket.userId });
     });
 
-    socket.on('send-message', async (data) => {
+    // SEND MESSAGE — **ONLY ONE HANDLER**
+    socket.on('send-message', async ({ roomId, text, attachments, clientId }) => {
       try {
         if (!socket.userId) {
-          socket.emit('error', { message: 'Not authenticated' });
+          socket.emit("error", { message: "Not authenticated" });
           return;
         }
-        const message = new Message({
-          roomId: data.roomId,
-          senderId: socket.userId,
-          text: data.text || '',
-          attachments: data.attachments || []
+    
+        if (!roomId) {
+          socket.emit("error", { message: "Room ID missing" });
+          return;
+        }
+    
+        // Save message
+        const created = await Message.create({
+          roomId,
+          senderId: socket.userId,   // ✅ FIXED HERE
+          text: text || "",
+          attachments: attachments || []
         });
-        await message.save();
-
-        const populated = await Message.findById(message._id).populate('senderId', 'name email');
-
+    
+        const populated = await Message.findById(created._id)
+          .populate("senderId", "name email");
+    
         const out = {
           _id: populated._id,
           roomId: populated.roomId,
@@ -118,23 +98,23 @@ function setupSocket(io) {
           text: populated.text,
           attachments: populated.attachments,
           createdAt: populated.createdAt,
-          editedAt: populated.editedAt,
-          deleted: populated.deleted,
           deliveredTo: populated.deliveredTo || [],
-          readBy: populated.readBy || []
+          readBy: populated.readBy || [],
+          clientId
         };
-
-        io.to(String(populated.roomId)).emit('message', out);
-        console.log('[SOCKET] message emitted', out._id.toString());
+    
+        io.to(String(roomId)).emit("message", out);
+    
       } catch (err) {
-        console.error('[SOCKET] send-message error', err);
-        socket.emit('error', { message: 'Server error' });
+        console.error("[SEND MESSAGE ERROR]", err);
+        socket.emit("error", { message: "Server error" });
       }
     });
+    
+    
 
-    socket.on('disconnect', (reason) => {
-      if (socket.userId) onlineUsers.delete(socket.userId);
-      console.log('[SOCKET] disconnected', socket.id, 'user=', socket.userId, 'reason=', reason);
+    socket.on('disconnect', () => {
+      if (socket.userId) onlineUsers.delete(String(socket.userId));
     });
   });
 }

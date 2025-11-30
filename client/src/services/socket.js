@@ -1,14 +1,14 @@
+// client/src/services/socket.js
 import { io } from 'socket.io-client';
 let socket = null;
 
 export function connectSocket(token) {
-  if (socket) {
-    try { socket.disconnect(); } catch(e) {}
-    socket = null;
-  }
+  // If socket already created, return it (do not disconnect)
+  if (socket) return socket;
 
-  socket = io(process.env.REACT_APP_SOCKET_URL || 'http://localhost:5001', {
+  socket = io(process.env.REACT_APP_SOCKET_URL, {
     autoConnect: false,
+    transports: ["websocket"],
     auth: { token }
   });
 
