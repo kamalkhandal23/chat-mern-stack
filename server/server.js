@@ -1,108 +1,72 @@
 // server/server.js
-require('dotenv').config();
-const express = require('express');
-const http = require('http');
-const mongoose = require('mongoose');
-const cors = require('cors');
-const path = require('path');
+require("dotenv").config();
+const express = require("express");
+const cors = require("cors");
+const http = require("http");
+const mongoose = require("mongoose");
+const path = require("path");
+const { setupSocket } = require("./sockets");
 
-const authRoutes = require('./routes/auth');
-const roomRoutes = require('./routes/rooms');
-const messageRoutes = require('./routes/messages');
-const uploadRoutes = require('./routes/upload');
-const { setupSocket } = require('./sockets');
+const authRoutes = require("./routes/auth");
+const roomRoutes = require("./routes/rooms");
+const messageRoutes = require("./routes/messages");
+const uploadRoutes = require("./routes/upload");
 
 const app = express();
 const server = http.createServer(app);
 
-/**
- * Config
- * - FRONTEND_URLS can be a comma separated list, or use CLIENT_URL single value.
- * - Fallback to localhost:3000 for local dev.
- */
-const rawFrontend = process.env.FRONTEND_URLS || process.env.CLIENT_URL || 'http://localhost:3000';
-const ALLOWED_ORIGINS = rawFrontend.split(',').map(s => s.trim()).filter(Boolean);
+// Allowed frontend origins
+const ALLOWED_ORIGINS = [
+  "http://localhost:3000",
+  "https://chat-mern-stack.vercel.app",
+];
 
-// Upload directory (relative to server folder)
-const UPLOAD_DIR = process.env.UPLOAD_DIR || './uploads';
+// CORS for REST API
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
+      if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
 
-// Middlewares
+      console.log("❌ CORS blocked:", origin);
+      return callback(new Error("Not allowed by CORS"), false);
+    },
+    credentials: true,
+  })
+);
+
 app.use(express.json());
 
-// Helpful startup log
-console.log('Allowed frontend origins:', ALLOWED_ORIGINS);
+// Health route
+app.get("/health", (req, res) => res.send("ok"));
 
-// Robust Express CORS middleware (dynamic origin check)
-app.use(cors({
-  origin: function (origin, callback) {
-    // allow requests with no origin (curl, Postman, server-to-server)
-    if (!origin) return callback(null, true);
-    if (ALLOWED_ORIGINS.indexOf(origin) !== -1) return callback(null, true);
-    console.warn(`CORS blocked request from origin: ${origin}`);
-    return callback(new Error('Not allowed by CORS'), false);
-  },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
-}));
+// Static Uploads
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// Ensure preflight handled
-app.options('*', cors());
+// API Routes
+app.use("/api/auth", authRoutes);
+app.use("/api/rooms", roomRoutes);
+app.use("/api/messages", messageRoutes);
+app.use("/api/upload", uploadRoutes);
 
-// health check endpoint (useful for Render/Vercel pings)
-app.get('/health', (req, res) => res.status(200).send('ok'));
+// MongoDB
+mongoose
+  .connect(process.env.MONGO_URI)
+  .then(() => console.log("MongoDB connected"))
+  .catch((e) => console.log("DB error:", e.message));
 
-// static uploads route
-app.use('/uploads', express.static(path.join(__dirname, UPLOAD_DIR)));
-
-// API routes
-app.use('/api/auth', authRoutes);
-app.use('/api/rooms', roomRoutes);
-app.use('/api/messages', messageRoutes);
-app.use('/api/upload', uploadRoutes);
-
-// MongoDB connection
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/mern-chat';
-mongoose.connect(MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-})
-  .then(() => console.log('MongoDB connected'))
-  .catch(err => console.error('MongoDB connection error:', err.message));
-
-// Socket.IO setup
-// NOTE: keep socket CORS policy consistent with express CORS
-
-
-// server/server.js (relevant socket.io part)
-const io = require('socket.io')(server, {
+// SOCKET.IO — THE FINAL FIX 🔥
+const io = require("socket.io")(server, {
   cors: {
     origin: ALLOWED_ORIGINS,
-    methods: ['GET','POST'],
-    credentials: true
+    methods: ["GET", "POST"],
+    credentials: true,
   },
-  // enable both transports so polling can fallback when websocket is blocked
-  transports: ['websocket', 'polling'],
-
-  // tune heartbeats (increase on PaaS like Render)
-  pingInterval: 25000, // client ping every 25s
-  pingTimeout: 60000,  // wait 60s before considering the client disconnected
-  maxHttpBufferSize: 1e6
+  transports: ["websocket", "polling"],
+  pingInterval: 25000,
+  pingTimeout: 60000,
 });
-io.on('connection', socket => {
-  console.log('[SOCKET] connected', socket.id);
-  socket.on('disconnect', (reason) => {
-    console.log('[SOCKET] disconnected', socket.id, 'reason=', reason);
-  });
-});
-
-
-// initialize app sockets
 setupSocket(io);
 
-// make io available via app if needed elsewhere
-app.set('io', io);
-
-// Start server
 const PORT = process.env.PORT || 10000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, () => console.log(`Server running on ${PORT}`));
