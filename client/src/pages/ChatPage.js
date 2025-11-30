@@ -585,14 +585,14 @@ return (
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
 
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    <button
+                    {/* <button
                       className="room-action-btn"
                       aria-label={`Room actions for ${r.name}`}
                       onClick={(ev) => openRoomMenu(ev, r._id)}
                       title="Room options"
                     >
                       ⋯
-                    </button>
+                    </button> */}
                   </div>
                 </div>
 
@@ -631,7 +631,7 @@ return (
                   </div>
                 ) : (
                   <div className="room-menu-actions">
-                    <button className="menu-item" onClick={(ev) => startRename(ev, r)}>Rename</button>
+                    <button className="menu-item" onClick={(ev) => startRename(ev, r)}>Renae</button>
                     <button className="menu-item delete" onClick={(ev) => startDeleteConfirm(ev, r._id)}>Delete</button>
                   </div>
                 )}
