@@ -9,7 +9,8 @@ export function connectSocket(token) {
   socket = io(process.env.REACT_APP_SOCKET_URL, {
     autoConnect: false,
     transports: ["websocket"],
-    auth: { token }
+    auth: { token },
+    upgrade: false
   });
 
   socket.on('connect', () => {
