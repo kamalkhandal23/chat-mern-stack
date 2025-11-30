@@ -3,43 +3,35 @@ import { io } from 'socket.io-client';
 let socket = null;
 
 export function connectSocket(token) {
-  // If socket already created, return it (do not disconnect)
-  if (socket) return socket;
+  if (socket) {
+    try { socket.disconnect(); } catch(e) {}
+    socket = null;
+  }
 
-  socket = io(process.env.REACT_APP_SOCKET_URL, {
+  const url = process.env.REACT_APP_SOCKET_URL || 'https://chat-mern-stack-1.onrender.com'; // production wss url
+  socket = io(url, {
     autoConnect: false,
-    transports: ["websocket"],
+    transports: ['websocket', 'polling'], // use polling fallback if websocket blocked
+    upgrade: true,
     auth: { token },
-    upgrade: false
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
+    randomizationFactor: 0.2
   });
 
-  socket.on('connect', () => {
-    console.log('[CLIENT SOCKET] connected', socket.id, 'connected=', socket.connected);
-  });
-  socket.on('connect_error', (err) => {
-    console.error('[CLIENT SOCKET] connect_error', err);
-  });
-  socket.on('disconnect', (reason) => {
-    console.log('[CLIENT SOCKET] disconnected', reason);
-  });
-  socket.on('authenticated', (data) => {
-    console.log('[CLIENT SOCKET] authenticated event from server ->', data);
-  });
-  socket.on('error', (err) => {
-    console.warn('[CLIENT SOCKET] error event', err);
-  });
+  socket.on('connect', () => console.log('[CLIENT SOCKET] connected', socket.id));
+  socket.on('connect_error', (err) => console.error('[CLIENT SOCKET] connect_error', err));
+  socket.on('disconnect', (reason) => console.warn('[CLIENT SOCKET] disconnected', reason));
 
-  window.__chatSocket = socket;
-  socket.connect();
-
+  // automatic authenticate after connect (if needed)
   socket.once('connect', () => {
     const t = token || localStorage.getItem('token');
-    if (t) {
-      try { socket.emit('authenticate', { token: t }); console.log('[CLIENT SOCKET] emitted authenticate'); }
-      catch(e){ console.warn('emit authenticate error', e); }
-    }
+    if (t) socket.emit('authenticate', { token: t });
   });
 
+  socket.connect();
   return socket;
 }
 

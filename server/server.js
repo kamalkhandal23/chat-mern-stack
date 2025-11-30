@@ -72,30 +72,30 @@ mongoose.connect(MONGO_URI, {
 
 // Socket.IO setup
 // NOTE: keep socket CORS policy consistent with express CORS
-const ioOptions = {
+
+
+// server/server.js (relevant socket.io part)
+const io = require('socket.io')(server, {
   cors: {
-    origin: function (origin, callback) {
-      // allow server-side tools with no origin
-      if (!origin) return callback(null, true);
-      if (ALLOWED_ORIGINS.indexOf(origin) !== -1) return callback(null, true);
-      console.warn('Socket.IO CORS blocked origin:', origin);
-      return callback(new Error('Not allowed by CORS'), false);
-    },
-    methods: ['GET', 'POST'],
+    origin: ALLOWED_ORIGINS,
+    methods: ['GET','POST'],
     credentials: true
   },
-
-  // Allow both websocket and polling (polling helps on platforms where raw websocket is blocked)
+  // enable both transports so polling can fallback when websocket is blocked
   transports: ['websocket', 'polling'],
 
-  // These are top-level socket.io options (not inside cors)
-  pingInterval: 25000,
-  pingTimeout: 60000,
-  maxHttpBufferSize: 1e6, // 1MB - adjust if you allow larger socket uploads
-  allowUpgrades: true
-};
+  // tune heartbeats (increase on PaaS like Render)
+  pingInterval: 25000, // client ping every 25s
+  pingTimeout: 60000,  // wait 60s before considering the client disconnected
+  maxHttpBufferSize: 1e6
+});
+io.on('connection', socket => {
+  console.log('[SOCKET] connected', socket.id);
+  socket.on('disconnect', (reason) => {
+    console.log('[SOCKET] disconnected', socket.id, 'reason=', reason);
+  });
+});
 
-const io = require('socket.io')(server, ioOptions);
 
 // initialize app sockets
 setupSocket(io);
