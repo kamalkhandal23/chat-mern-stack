@@ -68,28 +68,25 @@ function setupSocket(io) {
     });
 
     // SEND MESSAGE — **ONLY ONE HANDLER**
-    socket.on('send-message', async ({ roomId, text, attachments, clientId }) => {
+    socket.on('send-message', async ({ roomId, text, attachments, clientId } = {}) => {
       try {
         if (!socket.userId) {
-          socket.emit("error", { message: "Not authenticated" });
+          socket.emit('error', { message: 'Not authenticated' });
           return;
         }
-    
         if (!roomId) {
-          socket.emit("error", { message: "Room ID missing" });
+          socket.emit('error', { message: 'No roomId provided' });
           return;
         }
     
-        // Save message
         const created = await Message.create({
           roomId,
-          senderId: socket.userId,   // ✅ FIXED HERE
-          text: text || "",
-          attachments: attachments || []
+          senderId: socket.userId,
+          text: text || '',
+          attachments: Array.isArray(attachments) ? attachments : []
         });
     
-        const populated = await Message.findById(created._id)
-          .populate("senderId", "name email");
+        const populated = await Message.findById(created._id).populate('senderId', 'name email');
     
         const out = {
           _id: populated._id,
@@ -98,18 +95,22 @@ function setupSocket(io) {
           text: populated.text,
           attachments: populated.attachments,
           createdAt: populated.createdAt,
+          editedAt: populated.editedAt,
+          deleted: populated.deleted,
           deliveredTo: populated.deliveredTo || [],
-          readBy: populated.readBy || [],
-          clientId
+          readBy: populated.readBy || []
         };
     
-        io.to(String(roomId)).emit("message", out);
-    
+        if (clientId) out.clientId = clientId;
+        io.to(String(populated.roomId)).emit('message', out);
       } catch (err) {
-        console.error("[SEND MESSAGE ERROR]", err);
-        socket.emit("error", { message: "Server error" });
+        // Helpful debug logging:
+        console.error('[SOCKET] send-message failed:', err.name, err.message);
+        if (err.errors) console.error('[SOCKET] validation errors:', err.errors);
+        socket.emit('error', { message: 'Server error: ' + (err.message || 'unknown') });
       }
     });
+    
     
     
 

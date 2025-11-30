@@ -1,18 +1,16 @@
 const mongoose = require('mongoose');
+const { Schema } = mongoose;
 
-const messageSchema = new mongoose.Schema({
-  roomId: { type: mongoose.Schema.Types.ObjectId, ref: 'Room', required: true },
-  senderId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+const MessageSchema = new Schema({
+  roomId: { type: Schema.Types.ObjectId, ref: 'Room', required: true },
+  senderId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   text: { type: String, default: '' },
-  attachments: { type: Array, default: [] },
+  attachments: [{ fileName: String, url: String, fileType: String }],
   createdAt: { type: Date, default: Date.now },
-  editedAt: { type: Date },
+  editedAt: Date,
   deleted: { type: Boolean, default: false },
-  deliveredTo: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
-  readBy: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
-
-  // NEW: store client's tmp id to prevent duplicates
-  clientId: { type: String, index: { unique: true, sparse: true } }
+  deliveredTo: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+  readBy: [{ type: Schema.Types.ObjectId, ref: 'User' }]
 });
 
-module.exports = mongoose.model('Message', messageSchema);
+module.exports = mongoose.models.Message || mongoose.model('Message', MessageSchema);
