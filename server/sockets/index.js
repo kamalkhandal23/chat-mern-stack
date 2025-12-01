@@ -48,42 +48,51 @@ function setupSocket(io) {
     });
 
     // MESSAGE SEND — FIXED DUPLICATES 🛑
-    socket.on(
-      "send-message",
-      async ({ roomId, text, attachments, clientId }) => {
-        try {
-          // idempotency FIX (no double message ever)
-          const already = await Message.findOne({ clientId });
-          if (already) {
-            console.log("⛔ duplicate msg ignored:", clientId);
-            return socket.emit("message", {
-              ...already.toObject(),
-              clientId,
-            });
-          }
-
-          const msg = await Message.create({
-            roomId,
-            senderId: socket.userId,
-            text,
-            attachments,
-            clientId,
-          });
-
-          const populated = await Message.findById(msg._id).populate(
-            "senderId",
-            "name email"
-          );
-
-          io.to(roomId).emit("message", {
-            ...populated.toObject(),
-            clientId,
-          });
-        } catch (err) {
-          console.log("send-msg error:", err);
+    socket.on('send-message', async ({ roomId, text, attachments, clientId }) => {
+      try {
+        // FIX: force HTTPS inside attachments array
+        let safeAttachments = [];
+    
+        if (Array.isArray(attachments)) {
+          safeAttachments = attachments.map((a) => {
+            if (!a) return null;
+    
+            let finalUrl = a.url || a;
+    
+            // auto convert http → https
+            if (finalUrl.startsWith("http://")) {
+              finalUrl = finalUrl.replace("http://", "https://");
+            }
+    
+            return {
+              url: finalUrl,
+              fileName: a.fileName || null,
+              fileType: a.fileType || null,
+              size: a.size || null,
+            };
+          }).filter(Boolean);
         }
+    
+        // save message
+        const saved = await Message.create({
+          roomId,
+          senderId: socket.userId,
+          text,
+          attachments: safeAttachments,
+        });
+    
+        const msgForClients = {
+          ...saved.toObject(),
+          clientId,
+        };
+    
+        io.to(roomId).emit("message", msgForClients);
+        console.log("[SOCKET] message sent:", saved._id.toString());
+      } catch (err) {
+        console.error("[SOCKET] send-message error", err);
       }
-    );
+    });
+    
 
     socket.on("disconnect", () => {
       if (socket.userId) onlineUsers.delete(socket.userId);
