@@ -14,11 +14,23 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-router.post('/', auth, upload.single('file'), (req, res) => {
+r// server/routes/upload.js (example)
+router.post('/', upload.single('file'), (req, res) => {
   const file = req.file;
   if (!file) return res.status(400).json({ message: 'No file' });
-  const url = `${req.protocol}://${req.get('host')}/uploads/${file.filename}`;
-  res.json({ url, fileName: file.originalname, fileType: file.mimetype });
+
+  // build absolute URL using request host/protocol
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol; 
+  const host = req.get('host'); // e.g. chat-mern-stack-1.onrender.com
+  const fileUrl = `${protocol}://${host}/uploads/${file.filename}`;
+
+  return res.json({
+    url: fileUrl,
+    fileName: file.originalname,
+    fileType: file.mimetype,
+    size: file.size,
+  });
 });
+
 
 module.exports = router;

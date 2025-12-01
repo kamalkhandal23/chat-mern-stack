@@ -22,6 +22,20 @@ function setupSocket(io) {
       }
     });
 
+
+    // TYPING (forward to room)
+    socket.on('typing', (data) => {
+      try {
+        const { roomId, isTyping } = data || {};
+        if (!roomId) return;
+        // require authenticated userId (optional)
+        const userId = socket.userId || null;
+        socket.to(roomId).emit('typing', { userId, isTyping: !!isTyping });
+      } catch (err) {
+        console.error('[SOCKET] typing error', err);
+      }
+    });
+
     // JOIN ROOM
     socket.on("join-room", ({ roomId }) => {
       if (!roomId) return;
