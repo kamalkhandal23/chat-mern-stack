@@ -29,7 +29,7 @@ export default function Login(){
   return (
     <div className="app-center">
       <div className="card">
-        <div className="brand">Trading Titans — Chat</div>
+        <div className="brand">Chat</div>
         <div className="small">Sign in to continue</div>
 
         <form style={{marginTop:16}} onSubmit={login}>
