@@ -1,4 +1,3 @@
-// client/src/services/socket.js
 import { io } from "socket.io-client";
 
 let socket = null;
@@ -24,7 +23,7 @@ export function connectSocket(token) {
     console.log("[CLIENT SOCKET] connect_error", err);
   });
 
-  window.__chatSocket = socket; // for debugging
+  window.__chatSocket = socket; 
 
   return socket;
 }

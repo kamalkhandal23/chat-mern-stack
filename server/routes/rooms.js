@@ -1,4 +1,3 @@
-// backend/routes/rooms.js
 const express = require('express');
 const auth = require('../middlewares/auth');
 const Room = require('../models/Room');
@@ -6,9 +5,6 @@ const mongoose = require('mongoose');
 
 const router = express.Router();
 
-/**
- * Get all rooms
- */
 router.get('/', auth, async (req, res) => {
   try {
     const rooms = await Room.find().populate('createdBy', 'name').limit(200);
@@ -19,9 +15,6 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
-/**
- * Create room
- */
 router.post('/', auth, async (req, res) => {
   try {
     const { name, isPrivate, members } = req.body;

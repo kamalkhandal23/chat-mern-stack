@@ -1,4 +1,3 @@
-// server/server.js
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
@@ -6,7 +5,6 @@ const http = require("http");
 const mongoose = require("mongoose");
 const path = require("path");
 const { setupSocket } = require("./sockets");
-
 const authRoutes = require("./routes/auth");
 const roomRoutes = require("./routes/rooms");
 const messageRoutes = require("./routes/messages");
@@ -15,13 +13,11 @@ const uploadRoutes = require("./routes/upload");
 const app = express();
 const server = http.createServer(app);
 
-// Allowed frontend origins
 const ALLOWED_ORIGINS = [
   "http://localhost:3000",
   "https://chat-mern-stack.vercel.app",
 ];
 
-// CORS for REST API
 app.use(
   cors({
     origin: function (origin, callback) {
@@ -36,11 +32,7 @@ app.use(
 );
 
 app.use(express.json());
-
-// Health route
-app.get("/health", (req, res) => res.send("ok"));
-
-// Static Uploads
+app.get("/health", (req, res) => res.send("ok"))
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // API Routes
@@ -55,7 +47,7 @@ mongoose
   .then(() => console.log("MongoDB connected"))
   .catch((e) => console.log("DB error:", e.message));
 
-// SOCKET.IO — THE FINAL FIX 🔥
+
 const io = require("socket.io")(server, {
   cors: {
     origin: ALLOWED_ORIGINS,

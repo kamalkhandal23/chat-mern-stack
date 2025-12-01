@@ -1,4 +1,3 @@
-// server/routes/messages.js
 const express = require('express');
 const auth = require('../middlewares/auth');
 const Message = require('../models/Message');

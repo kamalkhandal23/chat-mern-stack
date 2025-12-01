@@ -5,7 +5,7 @@ const MessageSchema = new mongoose.Schema({
   senderId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   text: { type: String, default: '' },
   attachments: { type: Array, default: [] },
-  clientId: { type: String, index: true, sparse: true }, // optional client-side id
+  clientId: { type: String, index: true, sparse: true }, 
   deliveredTo: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   readBy: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   editedAt: Date,

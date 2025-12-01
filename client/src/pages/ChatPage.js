@@ -1,10 +1,8 @@
-// ------------------- ChatPage.jsx (PART 1) -------------------
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import API, { setAuthToken } from '../services/api';
 import { connectSocket, getSocket } from '../services/socket';
 import '../styles.css';
 
-/* helpers */
 function initials(name) {
   if (!name) return 'U';
   return name.split(' ')
@@ -58,7 +56,7 @@ export default function ChatPage() {
   const userName = localStorage.getItem('userName') || 'You';
   const myUserId = getUserIdFromToken();
 
-  // ---------------- SOCKET CONNECTION ----------------
+  // Socket Connection
   useEffect(() => {
     if (!token) return;
 
@@ -69,7 +67,6 @@ export default function ChatPage() {
 
     const s = socketRef.current;
     s.removeAllListeners("message");
-    // IMPORTANT: remove old listeners (fixes duplicate listeners)
     s.off('message');
     s.off('typing');
     s.off('message-updated');
@@ -77,14 +74,12 @@ export default function ChatPage() {
     s.off('message-delivered');
     s.off('message-read');
 
-    // FINAL FIX: safe message handler (NO DUPLICATES EVER)
+
     s.on('message', msg => {
-      console.log("📥 CLIENT RECEIVED:", msg._id, "clientId=", msg.clientId);
+      console.log("CLIENT RECEIVED:", msg._id, "clientId=", msg.clientId);
 
       setMessages(prev => {
-        console.log("📦 PREV_LENGTH:", prev.length);
-
-        // 0. If server provided clientId and temp exists -> replace it
+        console.log("PREV_LENGTH:", prev.length);
         if (msg.clientId) {
           const idxTmp = prev.findIndex(m => String(m._id) === String(msg.clientId));
           if (idxTmp !== -1) {
@@ -92,14 +87,9 @@ export default function ChatPage() {
           }
         }
 
-        // 1. If message with same _id already exists -> ignore (no duplicate)
         if (prev.some(m => String(m._id) === String(msg._id))) {
           return prev;
         }
-
-        // 2. EXTRA SAFEGUARD: sometimes client receives both tmp and server msg but clientId missing.
-        //    If an existing message has same sender + text + timestamp very close (within 2s),
-        //    treat server msg as the same and replace the tmp OR ignore duplicate append.
         const msgTime = msg.createdAt ? new Date(msg.createdAt).getTime() : null;
         const senderId = (msg.senderId && (msg.senderId._id || msg.senderId)) || null;
         if (msgTime && senderId) {
@@ -111,16 +101,15 @@ export default function ChatPage() {
               mTime && Math.abs(mTime - msgTime) <= 2000;
           });
           if (similarIdx !== -1) {
-            // If found similar temp message, replace it
+
             return prev.map((m, i) => i === similarIdx ? msg : m);
           }
         }
 
-        // 3. otherwise append normally
         return [...prev, msg];
       });
 
-      // mark delivered if not my msg
+
       const sender = msg.senderId?._id || msg.senderId;
       if (String(sender) !== String(myUserId)) {
         s.emit('message-delivered', { messageId: msg._id, roomId: msg.roomId });
@@ -141,11 +130,17 @@ export default function ChatPage() {
       setMessages(prev => prev.map(m => m._id === updated._id ? updated : m))
     );
 
-    s.on('message-deleted', ({ _id }) =>
-      setMessages(prev => prev.map(m =>
-        m._id === _id ? { ...m, deleted: true } : m
-      ))
-    );
+    s.on('message-deleted', ({ _id }) => {
+      console.log("Message deleted:", _id);
+
+      setMessages(prev =>
+        prev.map(m => m._id === _id ? { ...m, deleted: true } : m)
+      );
+    
+      setTimeout(() => {
+        loadMessages(activeRoom);
+      }, 150);
+    });
 
     s.on('message-delivered', ({ messageId, userId }) =>
       setMessages(prev => prev.map(m => {
@@ -168,9 +163,8 @@ export default function ChatPage() {
   }, [token, myUserId]);
 
 
-  // ------------------- ChatPage.jsx (PART 2) -------------------
 
-  // ---------------- LOAD ROOMS ----------------
+  // load rooms
   useEffect(() => { loadRooms(); }, []);
   function scrollToBottom() {
     if (messagesEndRef.current) {
@@ -211,7 +205,7 @@ export default function ChatPage() {
     scrollToBottom();
   }, [activeRoom]);
 
-  // ---------------- LOAD MESSAGES PER ROOM ----------------
+  // load messages per room
   useEffect(() => {
     if (!activeRoom) return;
     loadMessages(activeRoom);
@@ -246,7 +240,7 @@ export default function ChatPage() {
     }
   }
 
-  // ---------------- READ RECEIPTS (IntersectionObserver) ----------------
+  // read receipts
   useEffect(() => {
     if (observerRef.current) observerRef.current.disconnect();
 
@@ -268,7 +262,7 @@ export default function ChatPage() {
     return () => observerRef.current && observerRef.current.disconnect();
   }, [messages, activeRoom]);
 
-  // ---------------- TYPING ----------------
+  // typing
   const typingTimeoutRef = useRef(null);
 
   function handleInputChange(e) {
@@ -284,7 +278,7 @@ export default function ChatPage() {
     }, 800);
   }
 
-  // ---------------- UPLOAD ----------------
+  //upload
   async function uploadFile(file) {
     const form = new FormData();
     form.append('file', file);
@@ -298,7 +292,7 @@ export default function ChatPage() {
     setUploadPreview({ file, url: URL.createObjectURL(file) });
   };
 
-  // ---------------- SEND MESSAGE (NO DUPLICATES) ----------------
+  // send message
   async function sendMessage(e) {
     e?.preventDefault();
     if (!text.trim() && !uploadPreview) return;
@@ -320,10 +314,7 @@ export default function ChatPage() {
       }
     }
 
-    // guaranteed unique temp id
     const tmpId = 'tmp-' + Date.now() + '-' + Math.random().toString(36).slice(2);
-
-    // add optimistic message
     setMessages(prev => [
       ...prev,
       {
@@ -337,8 +328,6 @@ export default function ChatPage() {
         readBy: []
       }
     ]);
-
-    // send to server
     s.emit('send-message', {
       roomId: activeRoom,
       text,
@@ -349,7 +338,7 @@ export default function ChatPage() {
     setText('');
     setUploadPreview(null);
   }
-  // ---------------- ROOM ACTIONS (CREATE / RENAME / DELETE) ----------------
+  
   const createRoom = async () => {
     const name = prompt('Room name');
     if (!name || !name.trim()) return;
@@ -433,7 +422,7 @@ export default function ChatPage() {
     }
   };
 
-  // ---------------- EDIT / DELETE MESSAGE ----------------
+ 
   const startEdit = msg => {
     setEditingMsgId(msg._id);
     setEditingText(msg.text || '');
@@ -476,7 +465,7 @@ export default function ChatPage() {
     }
   };
 
-  // ---------------- MESSAGE TICK ICONS ----------------
+ 
   function renderTicks(m) {
     const sender = m.senderId?._id || m.senderId;
     if (String(sender) !== String(myUserId)) return null;
@@ -486,11 +475,9 @@ export default function ChatPage() {
     return <span className="ticks pending">•</span>;
   }
 
-  // ---------------- IMAGE PREVIEW ----------------
+
   const openImage = url => setPreviewImage(url);
   const closeImage = () => setPreviewImage(null);
-
-  // Observer ref helper
   const setObserveRef = useCallback((node, id) => {
     if (!id) return;
     if (node) {
@@ -502,22 +489,17 @@ export default function ChatPage() {
       observeRefs.current.delete(id);
     }
   }, []);
-  // ------------------- PART 4 / 5: UI Markup (Header, Messages, Input) -------------------
 
-  // Header menu outside click & ESC handling
   useEffect(() => {
     function onDocClick(e) {
       if (menuOpen) {
         if (menuRef.current && menuRef.current.contains(e.target)) {
-          // inside header menu — ignore
         } else if (menuButtonRef.current && menuButtonRef.current.contains(e.target)) {
-          // clicked the button — ignore
         } else {
           setMenuOpen(false);
         }
       }
 
-      // close per-room menu if click outside any .room-menu
       if (openRoomMenuId) {
         const roomMenuEls = document.querySelectorAll('.room-menu');
         let clickedInsideRoomMenu = false;
@@ -585,21 +567,12 @@ export default function ChatPage() {
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
 
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      {/* <button
-                      className="room-action-btn"
-                      aria-label={`Room actions for ${r.name}`}
-                      onClick={(ev) => openRoomMenu(ev, r._id)}
-                      title="Room options"
-                    >
-                      ⋯
-                    </button> */}
                     </div>
                   </div>
 
                   <div className="small">{r.members?.length || '-'} members</div>
                 </div>
 
-                {/* Inline room menu */}
                 <div
                   className={`room-menu ${openRoomMenuId === r._id ? 'open' : ''}`}
                   onClick={(e) => e.stopPropagation()}
@@ -673,8 +646,6 @@ export default function ChatPage() {
             </button>
 
             <div ref={menuRef} className={`header-menu ${menuOpen ? 'open' : ''}`} onMouseLeave={() => setMenuOpen(false)} role="menu">
-              <button className="menu-item" role="menuitem" onClick={() => { setMenuOpen(false); alert('Profile clicked'); }}>Profile</button>
-              <button className="menu-item" role="menuitem" onClick={() => { setMenuOpen(false); alert('Settings clicked'); }}>Settings</button>
               <div className="divider" style={{ margin: '6px 0' }} />
               <button className="menu-item" role="menuitem" onClick={() => { setMenuOpen(false); doLogout(); }}>Logout</button>
             </div>
